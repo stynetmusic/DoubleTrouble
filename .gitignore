@@ -1,0 +1,11 @@
+build/
+cmake-build-*/
+.DS_Store
+.idea/
+.vscode/
+*.user
+*.xcuserstate
+xcuserdata/
+CMakeUserPresets.json
+.cache/
+compile_commands.json
