@@ -14,6 +14,7 @@ struct Palette
     static juce::Colour text()          { return juce::Colour (0xffe8eaed); }
     static juce::Colour textDim()       { return juce::Colour (0xff8b90a0); }
     static juce::Colour accentAlign()   { return juce::Colour (0xff3ddbd9); }
+    static juce::Colour accentDrop()    { return juce::Colour (0xff4ade80); }
     static juce::Colour accentChoir()   { return juce::Colour (0xffe08b4f); }
     static juce::Colour danger()        { return juce::Colour (0xffe05c5c); }
     static juce::Colour track()         { return juce::Colour (0xff2a2e3c); }

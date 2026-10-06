@@ -42,8 +42,12 @@ public:
     dt::AlignSettings makeAlignSettings() const;
     dt::ChoirSettings makeChoirSettings() const;
 
-    /** Reload preview buffers from the selected take (message thread). */
-    void refreshPreviewClips();
+    /** Reload preview buffers (message thread).
+        Pass keepPosition=true when toggling Before/After so A/B stays in time. */
+    void refreshPreviewClips (bool keepPosition = false);
+
+    void setPreviewSoloTake (bool shouldSolo) noexcept { previewSolo.store (shouldSolo, std::memory_order_release); }
+    bool isPreviewSoloTake() const noexcept { return previewSolo.load (std::memory_order_acquire); }
 
 private:
     juce::AudioProcessorValueTreeState apvts;
@@ -67,6 +71,7 @@ private:
     std::atomic<float>* pChoirGain     = nullptr;
 
     std::atomic<double> hostBpm { 120.0 };
+    std::atomic<bool> previewSolo { false }; // false = play every loaded take
     double currentSampleRate = 44100.0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DoubleTroubleProcessor)

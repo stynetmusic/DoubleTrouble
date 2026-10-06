@@ -104,15 +104,39 @@ void WaveformView::paint (juce::Graphics& g)
         return;
     }
 
-    auto drawPeaks = [&g, &inner] (const Peaks& peaks, juce::Colour colour, float yFrac, float hFrac)
-    {
-        if (peaks.empty())
-            return;
+    auto refArea = inner.removeFromTop (inner.getHeight() * 0.46f);
+    inner.removeFromTop (8.0f);
+    auto takeArea = inner;
 
-        const auto area = inner.removeFromTop (inner.getHeight() * hFrac);
-        juce::ignoreUnused (yFrac);
+    auto drawLane = [&g] (const Peaks& peaks, juce::Rectangle<float> area,
+                          juce::Colour colour, const juce::String& emptyLabel)
+    {
+        g.setColour (colour.withAlpha (0.12f));
+        g.fillRoundedRectangle (area, 4.0f);
+
+        if (peaks.empty())
+        {
+            g.setColour (Palette::textDim());
+            g.setFont (juce::FontOptions (12.0f));
+            g.drawText (emptyLabel, area.toNearestInt(), juce::Justification::centred);
+            return;
+        }
+
+        auto peak = 0.0f;
+
+        for (size_t i = 0; i < peaks.maxv.size(); ++i)
+            peak = std::max (peak, std::max (std::abs (peaks.maxv[i]), std::abs (peaks.minv[i])));
+
+        if (peak < 1.0e-5f)
+        {
+            g.setColour (Palette::textDim());
+            g.setFont (juce::FontOptions (12.0f));
+            g.drawText (emptyLabel, area.toNearestInt(), juce::Justification::centred);
+            return;
+        }
+
         const auto mid = area.getCentreY();
-        const auto amp = area.getHeight() * 0.48f;
+        const auto amp = area.getHeight() * 0.46f / peak;
         const auto n = (int) peaks.maxv.size();
 
         juce::Path path;
@@ -132,19 +156,16 @@ void WaveformView::paint (juce::Graphics& g)
         }
 
         path.closeSubPath();
-        g.setColour (colour.withAlpha (0.85f));
+        g.setColour (colour.withAlpha (0.9f));
         g.fillPath (path);
     };
 
-    auto body = inner;
-    drawPeaks (referencePeaks, Palette::waveformRef(), 0.0f, 0.48f);
-    body.removeFromTop (body.getHeight() * 0.04f);
-    inner = body;
-    drawPeaks (takePeaks, Palette::waveformTake(), 0.52f, 1.0f);
+    drawLane (referencePeaks, refArea, Palette::waveformRef(), "Reference");
+    drawLane (takePeaks, takeArea, Palette::waveformTake(), "Take");
 
     if (playhead > 0.0f)
     {
-        const auto x = inner.getX() + playhead * inner.getWidth();
+        const auto x = bounds.getX() + 8.0f + playhead * (bounds.getWidth() - 16.0f);
         g.setColour (Palette::playhead().withAlpha (0.85f));
         g.drawLine (x, bounds.getY() + 8.0f, x, bounds.getBottom() - 8.0f, 1.2f);
     }

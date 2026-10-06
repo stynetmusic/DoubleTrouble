@@ -6,21 +6,23 @@
 namespace dt
 {
 /**
-    WSOLA time-scale / warp applicator.
+    High-quality elastic time-alignment.
 
-    `sourcePositionAtOutput[k]` is the (possibly fractional) source sample
-    that should land at output sample `k * hop`. The output length is
-    `(mapSize - 1) * hop`. Stereo channels share the same warp so the image
-    stays intact.
+    `sourcePositionAtOutput[k]` is the source sample that should land at
+    output sample `k * hop`.
+
+    Strategy:
+      - constant-offset warps are a pure delay (transparent);
+      - small local rate changes use pitch-synchronous WSOLA with OLA
+        normalisation (keeps formants, low grain);
+      - larger stretches use an identity-locked phase vocoder.
 */
-juce::AudioBuffer<float> applyWarpWsola (const juce::AudioBuffer<float>& source,
-                                         const std::vector<double>& sourcePositionAtOutput,
-                                         int hop = 256,
-                                         int windowSize = 1024,
-                                         int searchRadius = 128);
+juce::AudioBuffer<float> applyWarpHighQuality (const juce::AudioBuffer<float>& source,
+                                               const std::vector<double>& sourcePositionAtOutput,
+                                               int hop,
+                                               int numOutputSamples,
+                                               double sampleRate);
 
-/** Linear resample of `source` onto a destination of `numOutputSamples` using a warp map
-    defined at every hop. Faster / lower quality fallback used for tiny files. */
 juce::AudioBuffer<float> applyWarpLinear (const juce::AudioBuffer<float>& source,
                                           const std::vector<double>& sourcePositionAtOutput,
                                           int hop,

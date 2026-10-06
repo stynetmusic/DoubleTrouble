@@ -13,7 +13,8 @@ struct AudioClip
     juce::String name;
     juce::AudioBuffer<float> original;
     juce::AudioBuffer<float> aligned;
-    double sampleRate = 44100.0;
+    double sampleRate = 44100.0;         // original file rate
+    double alignedSampleRate = 44100.0;  // rate of `aligned` (reference rate after Align)
     bool hasAligned = false;
     int globalOffsetSamples = 0; // take is this many samples late vs reference
 };
@@ -45,9 +46,14 @@ public:
     void addTake (const juce::File& file);
     void removeTake (int index);
     void clearAll();
+    bool containsTake (const juce::File& file) const;
 
     void requestAlign (AlignSettings settings);
     void requestExport (int takeIndex, const juce::File& destWav);
+    void requestBounceMix (const juce::File& destWav, bool preferAligned, bool includeReference);
+
+    juce::File getBounceFile() const;
+    bool isBounceReady() const;
 
     bool isBusy() const noexcept { return busy.load (std::memory_order_acquire); }
     float getProgress() const noexcept { return progress.load (std::memory_order_acquire); }
@@ -60,6 +66,7 @@ public:
 
     juce::String getReferenceName() const;
     juce::String getTakeName (int index) const;
+    juce::StringArray getTakeDisplayNames() const;
     juce::File getReferenceFile() const;
     juce::File getTakeFile (int index) const;
 
@@ -68,8 +75,15 @@ public:
     juce::AudioBuffer<float> copyReference() const;
     juce::AudioBuffer<float> copyTakeOriginal (int index) const;
     juce::AudioBuffer<float> copyTakeAligned (int index) const;
+
+    /** Prefers an audible aligned buffer; otherwise the original take.
+        Writes the sample rate of the returned buffer into `sampleRate`. */
+    juce::AudioBuffer<float> copyTakePlayback (int index, bool preferAligned,
+                                               double& sampleRate) const;
+
     double getReferenceSampleRate() const;
     double getTakeSampleRate (int index) const;
+    double getTakeAlignedSampleRate (int index) const;
     bool takeHasAligned (int index) const;
 
     juce::SpinLock& getBufferLock() noexcept { return bufferLock; }
@@ -88,7 +102,8 @@ private:
         loadReference,
         loadTake,
         align,
-        exportTake
+        exportTake,
+        bounceMix
     };
 
     struct Job
@@ -97,6 +112,8 @@ private:
         juce::File file;
         int takeIndex = -1;
         AlignSettings settings;
+        bool preferAligned = true;
+        bool includeReference = false;
     };
 
     void run() override;
@@ -106,6 +123,10 @@ private:
     bool alignOneTake (AudioClip& take, const AudioClip& ref, const AlignSettings& settings,
                        juce::String& error);
     bool writeWav (const AudioClip& take, const juce::File& dest, juce::String& error);
+    bool writeBufferWav (const juce::AudioBuffer<float>& buffer, double sampleRate,
+                         const juce::File& dest, juce::String& error);
+    void runBounceMix (const Job& job);
+    void bumpContentEpoch() noexcept;
 
     juce::AudioFormatManager formats;
     mutable juce::SpinLock bufferLock;
@@ -119,6 +140,9 @@ private:
     std::atomic<bool> busy { false };
     std::atomic<float> progress { 0.0f };
     std::atomic<int> selectedTake { 0 };
+    std::atomic<int> contentEpoch { 0 };
+    std::atomic<int> bounceEpoch { -1 };
+    juce::File bounceFile;
     juce::String status { "Drop a reference vocal to begin." };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AlignmentEngine)

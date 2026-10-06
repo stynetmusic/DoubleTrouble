@@ -81,19 +81,45 @@ dt::ChoirSettings DoubleTroubleProcessor::makeChoirSettings() const
     return s;
 }
 
-void DoubleTroubleProcessor::refreshPreviewClips()
+void DoubleTroubleProcessor::refreshPreviewClips (bool keepPosition)
 {
-    const auto idx = alignment.getSelectedTake();
-    auto refBuf = alignment.copyReference();
-    const auto useAfter = pPreviewAfter != nullptr && pPreviewAfter->load() > 0.5f;
-    auto takeBuf = (useAfter && alignment.takeHasAligned (idx))
-                       ? alignment.copyTakeAligned (idx)
-                       : alignment.copyTakeOriginal (idx);
+    if (alignment.isBusy())
+        return;
 
-    const auto sr = alignment.hasReference() ? alignment.getReferenceSampleRate()
-                                             : alignment.getTakeSampleRate (idx);
-    preview.setClips (std::move (refBuf), std::move (takeBuf), sr);
-    preview.setUseAligned (useAfter);
+    auto refBuf = alignment.copyReference();
+    const auto refSR = alignment.getReferenceSampleRate();
+    const auto useAfter = pPreviewAfter != nullptr && pPreviewAfter->load() > 0.5f;
+    const auto numTakes = alignment.getNumTakes();
+    std::vector<dt::PreviewClip> clips;
+
+    if (numTakes > 0)
+    {
+        const auto solo = previewSolo.load (std::memory_order_acquire);
+
+        if (solo)
+        {
+            double sr = 44100.0;
+            auto buf = alignment.copyTakePlayback (alignment.getSelectedTake(), useAfter, sr);
+
+            if (buf.getNumSamples() > 1)
+                clips.push_back ({ std::move (buf), sr });
+        }
+        else
+        {
+            clips.reserve ((size_t) numTakes);
+
+            for (int i = 0; i < numTakes; ++i)
+            {
+                double sr = 44100.0;
+                auto buf = alignment.copyTakePlayback (i, useAfter, sr);
+
+                if (buf.getNumSamples() > 1)
+                    clips.push_back ({ std::move (buf), sr });
+            }
+        }
+    }
+
+    preview.setSession (std::move (refBuf), refSR, std::move (clips), keepPosition);
 }
 
 void DoubleTroubleProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
@@ -115,7 +141,10 @@ void DoubleTroubleProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
     }
 
     if (preview.isPlaying())
+    {
         preview.render (buffer);
+        return; // alignment preview is dry — choir must not pitch-shift the result
+    }
 
     choir.process (buffer, makeChoirSettings());
 }

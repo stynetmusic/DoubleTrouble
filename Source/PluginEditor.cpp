@@ -66,8 +66,17 @@ bool DoubleTroubleEditor::keyPressed (const juce::KeyPress& key)
 {
     if (key == juce::KeyPress::spaceKey)
     {
-        proc.refreshPreviewClips();
-        proc.getPreview().toggle();
+        if (proc.getAlignment().isBusy())
+            return true;
+
+        if (proc.getPreview().isPlaying())
+            proc.getPreview().stop();
+        else
+        {
+            proc.refreshPreviewClips();
+            proc.getPreview().play();
+        }
+
         return true;
     }
 

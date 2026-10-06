@@ -2,50 +2,61 @@
 
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <atomic>
+#include <vector>
 
 namespace dt
 {
+struct PreviewClip
+{
+    juce::AudioBuffer<float> buffer;
+    double sampleRate = 44100.0;
+};
+
 /**
     Internal transport for Alignment preview.
 
-    Renders reference + take (dry or aligned) into the host buffer, resampling
-    from the file rate to the host rate with linear interpolation.
+    Advances in *seconds* so each clip plays at its own sample rate.
+    Supports mixing every loaded take, or soloing one of them.
 */
 class PreviewPlayer
 {
 public:
     void prepare (double hostSampleRate, int samplesPerBlock);
-    void setClips (juce::AudioBuffer<float> reference,
-                   juce::AudioBuffer<float> take,
-                   double fileSampleRate);
+
+    void setSession (juce::AudioBuffer<float> reference, double referenceSampleRate,
+                     std::vector<PreviewClip> takes,
+                     bool keepPosition = false);
     void clear();
 
     void play();
     void stop();
     void toggle();
     bool isPlaying() const noexcept { return playing.load (std::memory_order_acquire); }
+    bool hasContent() const noexcept;
 
-    void setUseAligned (bool shouldUse) noexcept { useAligned.store (shouldUse, std::memory_order_release); }
     void setMix (float referenceGain, float takeGain) noexcept;
 
-    /** 0..1 playback progress, for the playhead. */
     float getProgress() const noexcept;
 
-    /** Called from the audio thread. Overwrites `buffer` when playing. */
+    /** Sum of currently loaded takes, for the waveform lane. */
+    juce::AudioBuffer<float> copyTakeMixForDisplay() const;
+
     void render (juce::AudioBuffer<float>& buffer);
 
 private:
-    juce::SpinLock lock;
+    double durationSeconds() const noexcept;
+    static float readClip (const juce::AudioBuffer<float>& src, int ch, double samplePos) noexcept;
+
+    mutable juce::SpinLock lock;
     juce::AudioBuffer<float> ref;
-    juce::AudioBuffer<float> take;
-    double fileRate = 44100.0;
+    std::vector<PreviewClip> takes;
+    double refRate = 44100.0;
     double hostRate = 44100.0;
 
     std::atomic<bool> playing { false };
-    std::atomic<bool> useAligned { true };
     std::atomic<float> refGain { 0.7f };
     std::atomic<float> takeGain { 0.9f };
-    std::atomic<double> position { 0.0 }; // in file-rate samples
+    std::atomic<double> positionSeconds { 0.0 };
     int maxBlock = 512;
 };
 } // namespace dt
